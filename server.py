@@ -1,5 +1,6 @@
 import socket
 import threading
+import time
 
 IP = "127.0.0.1"
 PORT = 5566
@@ -23,9 +24,10 @@ def handle_client(conn, addr):
                 connected = False
                 print(f"[{addr}] Disconnected")
             else:
-                print(f"[{addr}] {msg}")
-                response = f"Message received: {msg}"
-                conn.send(response.encode(FORMAT))
+                # Send current time to the client
+                current_time = time.strftime(
+                    '%Y-%m-%d %H:%M:%S', time.localtime())
+                conn.send(current_time.encode(FORMAT))
         except ConnectionResetError:
             print(f"[{addr}] Connection reset by peer")
             break

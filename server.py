@@ -1,55 +1,45 @@
 import socket
 import threading
-import time
+import wave
 import pyaudio
+import pickle
+import struct
+
+host_name = socket.gethostname()
+host_ip = "127.0.0.1"
+print(host_ip)
+port = 9611
 
 
-IP = "127.0.0.1"
-PORT = 5566
-ADDR = (IP, PORT)
-SIZE = 1024
-FORMAT = 'utf-8'
-DISCONNECT_MESSAGE = "!DISCONNECT"
+def audio_stream():
+    server_socket = socket.socket()
+    server_socket.bind((host_ip, (port-1)))
 
+    server_socket.listen(5)
+    CHUNK = 1024
+    wf = wave.open("./tswift-hitsdiff.wav", 'rb')
 
-def handle_client(conn, addr):
-    print(f"[NEW CONNECTION] {addr} connected.")
+    p = pyaudio.PyAudio()
+    print('server listening at', (host_ip, (port-1)))
 
-    connected = True
-    while connected:
-        try:
-            msg = conn.recv(SIZE).decode(FORMAT)
-            if not msg:
-                break
+    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
+                    channels=wf.getnchannels(),
+                    rate=wf.getframerate(),
+                    input=True,
+                    frames_per_buffer=CHUNK)
 
-            if msg == DISCONNECT_MESSAGE:
-                connected = False
-                print(f"[{addr}] Disconnected")
-            else:
-                # Send current time to the client
-                current_time = time.strftime(
-                    '%Y-%m-%d %H:%M:%S', time.localtime())
-                conn.send(current_time.encode(FORMAT))
-        except ConnectionResetError:
-            print(f"[{addr}] Connection reset by peer")
-            break
+    client_socket, addr = server_socket.accept()
 
-    conn.close()
-
-
-def main():
-    print("[STARTING] Server is starting...")
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.bind(ADDR)
-    server.listen()
-    print(f"[LISTENING] Server is listening on {IP}:{PORT}")
-
+    data = None
     while True:
-        conn, addr = server.accept()
-        thread = threading.Thread(target=handle_client, args=(conn, addr))
-        thread.start()
-        print(f"[ACTIVE CONNECTIONS] {threading.active_count()-1}")
+        if client_socket:
+            while True:
+
+                data = wf.readframes(CHUNK)
+                a = pickle.dumps(data)
+                message = struct.pack("Q", len(a))+a
+                client_socket.sendall(message)
 
 
-if __name__ == "__main__":
-    main()
+t1 = threading.Thread(target=audio_stream, args=())
+t1.start()

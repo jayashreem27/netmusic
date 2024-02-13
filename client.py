@@ -1,39 +1,58 @@
 import socket
-from time import sleep
+import os
+import threading
+import pyaudio
+import pickle
+import struct
+host_name = socket.gethostname()
+host_ip = '127.0.0.1'  # socket.gethostbyname(host_name)
+print(host_ip)
+port = 9611
 
-IP = "127.0.0.1"
-PORT = 5566
-ADDR = (IP, PORT)
-SIZE = 1024
-FORMAT = 'utf-8'
-DISCONNECT_MESSAGE = "!DISCONNECT"
 
+def audio_stream():
 
-def main():
-    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        client.connect(ADDR)
+    p = pyaudio.PyAudio()
+    CHUNK = 1024
+    stream = p.open(format=p.get_format_from_width(2),
+                    channels=2,
+                    rate=72000,
+                    output=True,
+                    frames_per_buffer=CHUNK)
 
-        while True:
-            try:
-                client.sendall("newpacket".encode(FORMAT))
-                # Receive message from the server
-                data = client.recv(SIZE).decode(FORMAT)
-                if not data:
+    # create socket
+    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    socket_address = (host_ip, port-1)
+    print('server listening at', socket_address)
+    client_socket.connect(socket_address)
+    print("CLIENT CONNECTED TO", socket_address)
+    data = b""
+    payload_size = struct.calcsize("Q")
+    while True:
+        try:
+            while len(data) < payload_size:
+                packet = client_socket.recv(4*1024)  # 4K
+                if not packet:
                     break
+                data += packet
+            packed_msg_size = data[:payload_size]
+            data = data[payload_size:]
+            msg_size = struct.unpack("Q", packed_msg_size)[0]
+            while len(data) < msg_size:
+                data += client_socket.recv(4*1024)
+            frame_data = data[:msg_size]
+            data = data[msg_size:]
+            frame = pickle.loads(frame_data)
+            stream.write(frame)
 
-                # Receive and print current time
-                print(f"[SERVER] {data}")
-                sleep(0.5)
+        except:
 
-            except KeyboardInterrupt:
-                print("\nDisconnecting...")
-                client.send(DISCONNECT_MESSAGE.encode(FORMAT))
-                break
+            break
 
-    finally:
-        client.close()
+    client_socket.close()
+    print('Audio closed')
+    os._exit(1)
 
 
-if __name__ == "__main__":
-    main()
+t1 = threading.Thread(target=audio_stream, args=())
+t1.start()

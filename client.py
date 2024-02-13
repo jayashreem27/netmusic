@@ -1,58 +1,40 @@
 import socket
-import os
-import threading
 import pyaudio
-import pickle
-import struct
-host_name = socket.gethostname()
-host_ip = '127.0.0.1'  # socket.gethostbyname(host_name)
-print(host_ip)
-port = 9611
+import sys
 
+client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+client_socket.connect(("127.0.0.1", 5544))
 
-def audio_stream():
+p = pyaudio.PyAudio()
+CHUNK = 1024
+FORMAT = pyaudio.paInt16
+CHANNELS = 2
+RATE = 48000
+RECORD_SECONDS = 3
+stream = p.open(format=FORMAT,
+                channels=CHANNELS,
+                rate=RATE,
+                output=True,
+                frames_per_buffer=CHUNK)
+while True:
+    res = client_socket.recv(1024).decode()
+    print(res)
+    print("\n")
+    sys.stdout.flush()
+    x = input("Enter The song to be Played : ")
+    client_socket.send(x.encode())
+    ch = int(client_socket.recv(1024).decode())
+    if ch == 0:
+        print("!!! Choose a legal song number !!!")
+        continue
+    if ch == 1:
+        print(" Track !!  ", x, "  !! Playing")
+        data = "1"
+        while data != "":
+            data = client_socket.recv(1024)
+            stream.write(data)
 
-    p = pyaudio.PyAudio()
-    CHUNK = 1024
-    stream = p.open(format=p.get_format_from_width(2),
-                    channels=2,
-                    rate=72000,
-                    output=True,
-                    frames_per_buffer=CHUNK)
-
-    # create socket
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    socket_address = (host_ip, port-1)
-    print('server listening at', socket_address)
-    client_socket.connect(socket_address)
-    print("CLIENT CONNECTED TO", socket_address)
-    data = b""
-    payload_size = struct.calcsize("Q")
-    while True:
-        try:
-            while len(data) < payload_size:
-                packet = client_socket.recv(4*1024)  # 4K
-                if not packet:
-                    break
-                data += packet
-            packed_msg_size = data[:payload_size]
-            data = data[payload_size:]
-            msg_size = struct.unpack("Q", packed_msg_size)[0]
-            while len(data) < msg_size:
-                data += client_socket.recv(4*1024)
-            frame_data = data[:msg_size]
-            data = data[msg_size:]
-            frame = pickle.loads(frame_data)
-            stream.write(frame)
-
-        except:
-
-            break
-
-    client_socket.close()
-    print('Audio closed')
-    os._exit(1)
-
-
-t1 = threading.Thread(target=audio_stream, args=())
-t1.start()
+stream.stop_stream()
+stream.close()
+p.terminate()

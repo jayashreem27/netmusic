@@ -1,45 +1,58 @@
 import socket
-import threading
-import wave
 import pyaudio
-import pickle
-import struct
-
-host_name = socket.gethostname()
-host_ip = "127.0.0.1"
-print(host_ip)
-port = 9611
+import wave
+import os
+from _thread import *
 
 
-def audio_stream():
-    server_socket = socket.socket()
-    server_socket.bind((host_ip, (port-1)))
-
-    server_socket.listen(5)
-    CHUNK = 1024
-    wf = wave.open("./tswift-hitsdiff.wav", 'rb')
-
-    p = pyaudio.PyAudio()
-    print('server listening at', (host_ip, (port-1)))
-
-    stream = p.open(format=p.get_format_from_width(wf.getsampwidth()),
-                    channels=wf.getnchannels(),
-                    rate=wf.getframerate(),
-                    input=True,
-                    frames_per_buffer=CHUNK)
-
-    client_socket, addr = server_socket.accept()
-
-    data = None
+def clientthread(conn, address):
+    print("<", address, ">  connected ")
     while True:
-        if client_socket:
-            while True:
 
-                data = wf.readframes(CHUNK)
-                a = pickle.dumps(data)
-                message = struct.pack("Q", len(a))+a
-                client_socket.sendall(message)
+        resource = os.listdir("./resource")
+        ss = "\n\n\n\n \t\t Media Player \n"
+        for i in range(len(resource)):
+            if i % 2 == 0:
+                ss += "\n"
+            resource[i] = resource[i][:-4]
+            ss = ss+"\t"+resource[i]+"\t"
+        conn.send(ss.encode())
+        x = conn.recv(1024).decode()
+        for i in resource:
+            if x.lower() == i.lower():
+                print("song found")
+                conn.send("1".encode())
+                x = i
+                break
+        else:
+            conn.send("0".encode())
+            continue
+        x = "./resource/"+x+".wav"
+        print(x)
+        wf = wave.open(x, 'rb')
+
+        p = pyaudio.PyAudio()
+
+        CHUNK = 1024
+        FORMAT = pyaudio.paInt16
+        CHANNELS = 2
+        RATE = 48000
+        stream = p.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        output=True,
+                        frames_per_buffer=CHUNK)
+
+        data = 1
+        while data:
+            data = wf.readframes(CHUNK)
+            conn.send(data)
 
 
-t1 = threading.Thread(target=audio_stream, args=())
-t1.start()
+server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+# server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server_socket.bind(("", 5544))
+server_socket.listen(10)
+while True:
+    conn, address = server_socket.accept()
+    start_new_thread(clientthread, (conn, address))

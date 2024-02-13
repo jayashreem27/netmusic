@@ -1,6 +1,8 @@
 import socket
 import threading
 import time
+import pyaudio
+
 
 IP = "127.0.0.1"
 PORT = 5566

@@ -1,12 +1,15 @@
 import socket
 import pyaudio
+import os
 import sys
 
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 client_socket.connect(("127.0.0.1", 5544))
 
+sys.stderr = "/dev/null"
 p = pyaudio.PyAudio()
+
 CHUNK = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
@@ -17,6 +20,7 @@ stream = p.open(format=FORMAT,
                 rate=RATE,
                 output=True,
                 frames_per_buffer=CHUNK)
+sys.stderr = sys.__stderr__
 while True:
     res = client_socket.recv(1024).decode()
     print(res)

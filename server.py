@@ -7,28 +7,41 @@ import ssl
 
 def clientthread(conn, address):
     print("<", address, ">  connected ")
-    while True:
+    try:
+        # Retrieve the list of available resources
         resource = os.listdir("./resource")
         ss = "\n\n\n\n \t\t Media Player \n"
         for i in range(len(resource)):
             if i % 2 == 0:
                 ss += "\n"
             resource[i] = resource[i][:-4]
-            ss = ss+"\t"+resource[i]+"\t"
+            ss = ss + "\t" + resource[i] + "\t"
         conn.send(ss.encode())
+
+        # Receive the selected resource from the client
         x = conn.recv(1024).decode()
+
+        # Check if the selected resource exists
         for i in resource:
             if x.lower() == i.lower():
-                print("song found")
+                print("Song found")
                 conn.send("1".encode())
                 x = i
                 break
         else:
             conn.send("0".encode())
-            continue
-        x = "./resource/"+x+".wav"
+            raise ValueError("Selected resource not found")
+
+        # Open the selected resource file
+        x = "./resource/" + x + ".wav"
         print(x)
-        wf = wave.open(x, 'rb')
+
+        # Error handling for file operations
+        try:
+            wf = wave.open(x, 'rb')
+        except Exception as file_error:
+            print("Error opening audio file:", file_error)
+            raise
 
         p = pyaudio.PyAudio()
 
@@ -36,18 +49,54 @@ def clientthread(conn, address):
         FORMAT = pyaudio.paInt16
         CHANNELS = 2
         RATE = 48000
-        stream = p.open(format=FORMAT,
-                        channels=CHANNELS,
-                        rate=RATE,
-                        output=True,
-                        frames_per_buffer=CHUNK)
 
-        data = 1
-        while data:
+        # Open a PyAudio stream for audio playback
+        try:
+            stream = p.open(format=FORMAT,
+                            channels=CHANNELS,
+                            rate=RATE,
+                            output=True,
+                            frames_per_buffer=CHUNK)
+        except pyaudio.PyAudioError as audio_error:
+            print("PyAudio error:", audio_error)
+            raise
+
+        # Stream the audio data to the client
+        try:
             data = wf.readframes(CHUNK)
-            conn.send(data)
+            while data:
+                conn.send(data)
+                data = wf.readframes(CHUNK)
+        except Exception as send_error:
+            print("Error sending data:", send_error)
+            raise
 
+        # Close the resources after streaming is complete
+        finally:
+            wf.close()
+            stream.stop_stream()
+            stream.close()
+            p.terminate()
+            conn.close()
+
+    except socket.error as socket_error:
+        print("Socket error:", socket_error)
+        conn.close()
+    except IOError as file_error:
+        print("File error:", file_error)
+        conn.close()
+    except pyaudio.PyAudioError as audio_error:
+        print("PyAudio error:", audio_error)
+        conn.close()
+    except Exception as e:
+        print("Unexpected error:", e)
+        conn.close()
+
+# Create a regular socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+# Set a timeout of 10 seconds for connection acceptance
+server_socket.settimeout(10)
 
 # Create an SSL context for the server
 ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -77,5 +126,8 @@ server_socket.bind(("", 5544))
 server_socket.listen(10)
 
 while True:
-    conn, address = server_socket.accept()
-    start_new_thread(clientthread, (conn, address))
+    try:
+        conn, address = server_socket.accept()
+        start_new_thread(clientthread, (conn, address))
+    except socket.timeout:
+        print("Connection timed out. Retrying...")

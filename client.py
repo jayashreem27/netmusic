@@ -1,13 +1,15 @@
 import socket
 import pyaudio
-import os
+import ssl
 import sys
 
-client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+context = ssl.create_default_context()
+context.load_verify_locations('./rootCA.pem')
+client_socket = context.wrap_socket(socket.socket(
+    socket.AF_INET, socket.SOCK_STREAM), server_hostname="localhost")
+
 client_socket.connect(("127.0.0.1", 5544))
 
-sys.stderr = "/dev/null"
 p = pyaudio.PyAudio()
 
 CHUNK = 1024
@@ -20,24 +22,33 @@ stream = p.open(format=FORMAT,
                 rate=RATE,
                 output=True,
                 frames_per_buffer=CHUNK)
-sys.stderr = sys.__stderr__
+
 while True:
-    res = client_socket.recv(1024).decode()
-    print(res)
-    print("\n")
-    sys.stdout.flush()
-    x = input("Enter The song to be Played : ")
-    client_socket.send(x.encode())
-    ch = int(client_socket.recv(1024).decode())
-    if ch == 0:
-        print("!!! Choose a legal song number !!!")
-        continue
-    if ch == 1:
-        print(" Track !!  ", x, "  !! Playing")
-        data = "1"
-        while data != "":
-            data = client_socket.recv(1024)
-            stream.write(data)
+    try:
+        res = client_socket.recv(1024).decode()
+        print(res)
+        print("\n")
+        sys.stdout.flush()
+        x = input("Enter The song to be Played : ")
+        client_socket.send(x.encode())
+        ch = int(client_socket.recv(1024).decode())
+        if ch == 0:
+            print("!!! Choose a legal song number !!!")
+            continue
+        if ch == 1:
+            print(" Track !!  ", x, "  !! Playing")
+            data = "1"
+            while data != "":
+                client_socket.send("keepalive".encode())
+                data = client_socket.recv(1024)
+                stream.write(data)
+    except Exception as e:
+        print(e)
+        break
+    except KeyboardInterrupt:
+        client_socket.send("exit".encode('utf-8'))
+        client_socket.close()
+        break
 
 stream.stop_stream()
 stream.close()

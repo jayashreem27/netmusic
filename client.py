@@ -2,14 +2,18 @@ import socket
 import pyaudio
 import ssl
 import sys
+import time
 
-context = ssl.create_default_context()
-context.load_verify_locations('./rootCA.pem')
-client_socket = context.wrap_socket(socket.socket(
-    socket.AF_INET, socket.SOCK_STREAM), server_hostname="localhost")
+try:
+    context = ssl.create_default_context()
+    context.load_verify_locations('./rootCA.pem')
+    client_socket = context.wrap_socket(socket.socket(
+        socket.AF_INET, socket.SOCK_STREAM), server_hostname="localhost")
 
-client_socket.connect(("127.0.0.1", 5544))
-
+    client_socket.connect(("127.0.0.1", 5544))
+except Exception as e:
+    print(e)
+    sys.exit(1)
 p = pyaudio.PyAudio()
 
 CHUNK = 1024
@@ -25,7 +29,10 @@ stream = p.open(format=FORMAT,
 
 while True:
     try:
-        res = client_socket.recv(1024).decode()
+        print("Starting receiving")
+        res = client_socket.recv(1024)
+        print("Received")
+        res = res.decode()[4::]
         print(res)
         print("\n")
         sys.stdout.flush()
@@ -39,9 +46,19 @@ while True:
             print(" Track !!  ", x, "  !! Playing")
             data = "1"
             while data != "":
-                client_socket.send("keepalive".encode())
-                data = client_socket.recv(1024)
-                stream.write(data)
+                try:
+                    client_socket.send("keepalive".encode())
+                    data = client_socket.recv(1024)
+                    stream.write(data)
+                except Exception as e:
+                    print(e)
+                    break
+                except KeyboardInterrupt:
+                    print("Inner loop")
+                    client_socket.send("stop".encode())
+                    data = ""
+            print("starting again")
+            time.sleep(0.1)
     except Exception as e:
         print(e)
         break

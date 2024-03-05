@@ -4,6 +4,7 @@ import wave
 import os
 import threading
 import ssl
+import time
 
 
 def clientthread(insecure_conn, address, context):
@@ -12,12 +13,13 @@ def clientthread(insecure_conn, address, context):
         while True:
             try:
                 resource = os.listdir("./resource")
-                ss = "\n\n\n\n \t\t Media Player \n"
+                ss = "DAT:\n\n\n\n \t\t Media Player \n"
                 for i in range(len(resource)):
                     if i % 2 == 0:
                         ss += "\n"
                     resource[i] = resource[i][:-4]
                     ss = ss+"\t"+resource[i]+"\t"
+                print("sending values")
                 conn.send(ss.encode())
                 x = conn.recv(1024).decode()
                 for i in resource:
@@ -44,24 +46,33 @@ def clientthread(insecure_conn, address, context):
                                 channels=CHANNELS,
                                 rate=RATE,
                                 output=True,
-                                frames_per_buffer=CHUNK)
+                                frames_per_buffer=CHUNK-4)
 
                 data = 1
+                message = ""
                 while data:
                     try:
-                        message = conn.recv(1024).decode('utf-8')
-                        if message == "exit":
-                            stream.stop_stream()
-                            p.terminate()
-                            conn.close()
+                        message = conn.recv(1024).decode()
+                        if message != "keepalive":
+                            data = 0
                             break
                         data = wf.readframes(CHUNK)
-                        conn.send(data)
+                        conn.send("MUS:".encode() + data)
                     except Exception as e:
                         print(e)
                         break
                     except KeyboardInterrupt:
                         break
+                if message == "exit":
+                    stream.stop_stream()
+                    p.terminate()
+                    conn.close()
+                    break
+                if message == "stop":
+                    print("received stop")
+                    stream.stop_stream()
+                    p.terminate()
+                time.sleep(0.1)
             except Exception as e:
                 print(e)
                 break
@@ -76,6 +87,12 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 server_socket.bind(('', 5544))
 server_socket.listen()
 while True:
-    conn, address = server_socket.accept()
-    threading.Thread(target=clientthread, args=(
-        conn, address, context)).start()
+    try:
+        conn, address = server_socket.accept()
+        threading.Thread(target=clientthread, args=(
+            conn, address, context)).start()
+    except Exception as e:
+        print(e)
+        break
+    except KeyboardInterrupt:
+        break

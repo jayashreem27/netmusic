@@ -49,7 +49,7 @@ while True:
                 try:
                     client_socket.send("keepalive".encode())
                     data = client_socket.recv(1024)
-                    stream.write(data)
+                    stream.write(data[4:])
                 except Exception as e:
                     print(e)
                     break

@@ -1,98 +1,67 @@
 import socket
-import pyaudio
-import wave
 import os
-import threading
+import wave
 import ssl
-import time
+import threading
+
+HOST = "127.0.0.1"
+PORT = 5544
+PACKET_SIZE = 1024
+SONGS_DIR = "./resource/"
 
 
-def clientthread(insecure_conn, address, context):
-    with context.wrap_socket(insecure_conn, server_side=True) as conn:
-        print("<", address, ">  connected ")
-        while True:
-            try:
-                resource = os.listdir("./resource")
-                ss = "DAT:\n\n\n\n \t\t Media Player \n"
-                for i in range(len(resource)):
-                    if i % 2 == 0:
-                        ss += "\n"
-                    resource[i] = resource[i][:-4]
-                    ss = ss+"\t"+resource[i]+"\t"
-                print("sending values")
-                conn.send(ss.encode())
-                x = conn.recv(1024).decode()
-                for i in resource:
-                    if x.lower() == i.lower():
-                        print("song found")
-                        conn.send("1".encode())
-                        x = i
-                        break
-                else:
-                    conn.send("0".encode())
-                    continue
-                x = "./resource/"+x+".wav"
-                print(x)
-                wf = wave.open(x, 'rb')
+def client_thread(conn, address, ssl_context):
+    # upgrade connection to SSL
+    with ssl_context.wrap_socket(conn, server_side=True) as secure_conn:
+        print("[", address, "] connected")
 
-                p = pyaudio.PyAudio()
-
-                CHUNK = 1024
-                FORMAT = pyaudio.paInt16
-                CHANNELS = 2
-                RATE = 48000
-
-                stream = p.open(format=FORMAT,
-                                channels=CHANNELS,
-                                rate=RATE,
-                                output=True,
-                                frames_per_buffer=CHUNK-4)
-
-                data = 1
-                message = ""
-                while data:
-                    try:
-                        message = conn.recv(1024).decode()
-                        if message != "keepalive":
-                            data = 0
-                            break
-                        data = wf.readframes(CHUNK)
-                        conn.send("MUS:".encode() + data)
-                    except Exception as e:
-                        print(e)
-                        break
-                    except KeyboardInterrupt:
-                        break
-                if message == "exit":
-                    stream.stop_stream()
-                    p.terminate()
-                    conn.close()
+        # parse the files available and send
+        files = os.listdir(SONGS_DIR)
+        files_data = ",".join(files)
+        secure_conn.send(files_data.encode())
+        try:
+            # receive client response containing file name
+            filename = secure_conn.recv(PACKET_SIZE).decode()
+            for file in files:
+                if filename in file:
+                    secure_conn.send("Accepted".encode())
                     break
-                if message == "stop":
-                    print("received stop")
-                    stream.stop_stream()
-                    p.terminate()
-                time.sleep(0.1)
-            except Exception as e:
-                print(e)
-                break
-            except KeyboardInterrupt:
-                break
+            else:
+                secure_conn.send("Rejected".encode())
+                secure_conn.close()
+                return None
+
+            # open wave file to play
+            song = SONGS_DIR + filename
+            waveform = wave.open(song, 'rb')
+
+            print("Opened file", song)
+            # start transmission loop
+            data = " "
+            while data:
+                # send the next chunk
+                data = waveform.readframes(PACKET_SIZE)
+                secure_conn.send(data)
+        except Exception as e:
+            print(e)
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt")
+        finally:
+            secure_conn.close()
 
 
-# create a context
-context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-context.load_cert_chain(certfile="./rootCA.pem", keyfile="./rootCA.key")
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server_socket.bind(('', 5544))
-server_socket.listen()
-while True:
-    try:
+if __name__ == "__main__":
+    # define the SSL socket using the keyfiles
+    context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+    context.load_cert_chain(certfile="./rootCA.pem", keyfile="./rootCA.key")
+
+    # create a socket
+    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server_socket.bind((HOST, PORT))
+    server_socket.listen()
+
+    # always listen
+    while True:
         conn, address = server_socket.accept()
-        threading.Thread(target=clientthread, args=(
+        threading.Thread(target=client_thread, args=(
             conn, address, context)).start()
-    except Exception as e:
-        print(e)
-        break
-    except KeyboardInterrupt:
-        break

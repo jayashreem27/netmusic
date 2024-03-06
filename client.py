@@ -1,72 +1,158 @@
 import socket
 import pyaudio
 import ssl
-import sys
+import threading
+import queue
 import time
 
-try:
-    context = ssl.create_default_context()
-    context.load_verify_locations('./rootCA.pem')
-    client_socket = context.wrap_socket(socket.socket(
-        socket.AF_INET, socket.SOCK_STREAM), server_hostname="localhost")
+HOSTNAME = "localhost"
+HOST = "127.0.0.1"
+PORT = 5544
+PACKET_SIZE = 1024
 
-    client_socket.connect(("127.0.0.1", 5544))
-except Exception as e:
-    print(e)
-    sys.exit(1)
-p = pyaudio.PyAudio()
 
-CHUNK = 1024
-FORMAT = pyaudio.paInt16
-CHANNELS = 2
-RATE = 48000
-RECORD_SECONDS = 3
-stream = p.open(format=FORMAT,
-                channels=CHANNELS,
-                rate=RATE,
-                output=True,
-                frames_per_buffer=CHUNK)
-
-while True:
-    try:
-        print("Starting receiving")
-        res = client_socket.recv(1024)
-        print("Received")
-        res = res.decode()[4::]
-        print(res)
-        print("\n")
-        sys.stdout.flush()
-        x = input("Enter The song to be Played : ")
-        client_socket.send(x.encode())
-        ch = int(client_socket.recv(1024).decode())
-        if ch == 0:
-            print("!!! Choose a legal song number !!!")
-            continue
-        if ch == 1:
-            print(" Track !!  ", x, "  !! Playing")
-            data = "1"
-            while data != "":
-                try:
-                    client_socket.send("keepalive".encode())
-                    data = client_socket.recv(1024)
-                    stream.write(data[4:])
-                except Exception as e:
-                    print(e)
-                    break
-                except KeyboardInterrupt:
-                    print("Inner loop")
+def playback_thread(queue, client_socket, audio, stream):
+    # Start recv cycle
+    data = " "
+    main_message = ""
+    while data:
+        try:
+            if not queue.empty():
+                main_message = queue.get()
+            else:
+                main_message = ""
+            data = client_socket.recv(PACKET_SIZE)
+            stream.write(data)
+            if main_message == "pause":
+                client_socket.send("paus".encode())
+                stream.stop_stream()
+                while queue.empty():
+                    time.sleep(0.01)
+                main_message = queue.get()
+                if main_message == "play":
+                    client_socket.send("play".encode())
+                    stream.start_stream()
+                if main_message == "stop":
                     client_socket.send("stop".encode())
-                    data = ""
-            print("starting again")
-            time.sleep(0.1)
-    except Exception as e:
-        print(e)
-        break
-    except KeyboardInterrupt:
-        client_socket.send("exit".encode('utf-8'))
-        client_socket.close()
-        break
+                    break
+            else:
+                client_socket.send("live".encode())
+                time.sleep(0.001)
+        except Exception as e:
+            print(e)
+            break
+        except KeyboardInterrupt:
+            break
 
-stream.stop_stream()
-stream.close()
-p.terminate()
+
+def main():
+    # Define an SSL context and verify hostname
+    context = ssl.create_default_context()
+    context.load_verify_locations("./rootCA.pem")
+
+    # Start PyAudio for music playback
+    print("You may see some audio initialization text below. This is normal.")
+    audio = pyaudio.PyAudio()
+    stream = audio.open(format=pyaudio.paInt16,
+                        channels=2,
+                        rate=48000,
+                        output=True,
+                        frames_per_buffer=PACKET_SIZE)
+    print("Audio Initialization ended\n\n")
+
+    # Main loop
+    while True:
+        try:
+            # Create and connect socket connection
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            client_socket = context.wrap_socket(sock, server_hostname=HOSTNAME)
+            client_socket.connect((HOST, PORT))
+
+            res = client_socket.recv(PACKET_SIZE).decode()
+            filenames = res.split(",")
+
+            # Print files and accept num
+            print("Welcome to the NetMusic Server!")
+            print("Below is a list of filenames available.")
+            for i in range(len(filenames)):
+                print(f"    {i+1}:      {filenames[i]}")
+
+            correct = False
+            while not correct:
+                num = int(input("\nType the file number, zero to exit: "))
+                if num == 0:
+                    print("Exiting...")
+                    exit(0)
+                elif num-1 < len(filenames) and num > 0:
+                    correct = True
+                else:
+                    print("Incorrect option!")
+            client_socket.send(filenames[num-1].encode())
+
+            # Was the response correct
+            res = client_socket.recv(PACKET_SIZE).decode()
+            if res == "Rejected":
+                print("Server rejected our connection")
+                break
+            else:
+                print("Server accepted!")
+
+        except Exception as e:
+            print(e)
+            # Close the client socket and audio stream
+            client_socket.close()
+            stream.stop_stream()
+            stream.close()
+
+            # Terminate PyAudio
+            audio.terminate()
+
+            print("Connection closed.")
+            break
+        except KeyboardInterrupt:
+            print("User interrupted. Closing connection.")
+
+            # Close the client socket and audio stream
+            client_socket.close()
+            stream.stop_stream()
+            stream.close()
+
+            # Terminate PyAudio
+            audio.terminate()
+
+            print("Connection closed.")
+            break
+
+        # Start audio worker thread
+        comm_queue = queue.Queue()
+        audio_worker = threading.Thread(
+            target=playback_thread,
+            args=(comm_queue, client_socket, audio, stream)
+        )
+        audio_worker.start()
+        print("Playing... ")
+
+        # main control thread
+        while True:
+            try:
+                time.sleep(0.1)
+            except KeyboardInterrupt:
+                comm_queue.put("pause")
+                try:
+                    inp = input("Paused. Enter p to play, s to stop: ")
+                    if inp == "p":
+                        comm_queue.put("play")
+                        print("Playing... ")
+                    else:
+                        comm_queue.put("stop")
+                        audio_worker.join()
+                        break
+                except KeyboardInterrupt:
+                    comm_queue.put("stop")
+                    audio_worker.join()
+                    break
+        stream.start_stream()
+
+
+if __name__ == "__main__":
+    main()

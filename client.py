@@ -130,7 +130,7 @@ def main():
             args=(comm_queue, client_socket, audio, stream)
         )
         audio_worker.start()
-        print("Playing... ")
+        print("Playing (press ctrl^c to pause)... ")
 
         # main control thread
         while True:
@@ -139,7 +139,7 @@ def main():
             except KeyboardInterrupt:
                 comm_queue.put("pause")
                 try:
-                    inp = input("Paused. Enter p to play, s to stop: ")
+                    inp = input("\nPaused. Enter p to play, s to stop: ")
                     if inp == "p":
                         comm_queue.put("play")
                         print("Playing... ")

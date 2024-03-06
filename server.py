@@ -42,6 +42,14 @@ def client_thread(conn, address, ssl_context):
                 # send the next chunk
                 data = waveform.readframes(PACKET_SIZE)
                 secure_conn.send(data)
+                res = secure_conn.recv(PACKET_SIZE).decode()
+                if res == "paus":
+                    while True:
+                        res = secure_conn.recv(PACKET_SIZE).decode()
+                        if res == "play":
+                            continue
+                        else:
+                            break
         except Exception as e:
             print(e)
         except KeyboardInterrupt:

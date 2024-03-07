@@ -75,7 +75,8 @@ def main():
             print("Welcome to the NetMusic Server!")
             print("Below is a list of filenames available.")
             for i in range(len(filenames)):
-                print(f"    {i+1}:      {filenames[i]}")
+                fname = filenames[i][:-4].replace('_', ' ')
+                print(f"    {i+1}:      {fname}")
 
             correct = False
             while not correct:
@@ -130,7 +131,8 @@ def main():
             args=(comm_queue, client_socket, audio, stream)
         )
         audio_worker.start()
-        print("Playing (press ctrl^c to pause)... ")
+        fname = filenames[num-1][:-4].replace('_', ' ')
+        print(f"\n\nPlaying {fname} (press ctrl^c to pause)... ")
 
         # main control thread
         while True:
@@ -142,7 +144,7 @@ def main():
                     inp = input("\nPaused. Enter p to play, s to stop: ")
                     if inp == "p":
                         comm_queue.put("play")
-                        print("Playing... ")
+                        print("\nPlaying... ")
                     else:
                         comm_queue.put("stop")
                         audio_worker.join()

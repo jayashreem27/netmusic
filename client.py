@@ -5,7 +5,7 @@ import threading
 import queue
 import time
 
-HOSTNAME = "fedora"
+HOSTNAME = "netmusic"
 HOST = "172.20.10.2"
 PORT = 5544
 PACKET_SIZE = 1024

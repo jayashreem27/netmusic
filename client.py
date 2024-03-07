@@ -5,8 +5,8 @@ import threading
 import queue
 import time
 
-HOSTNAME = "localhost"
-HOST = "127.0.0.1"
+HOSTNAME = "fedora"
+HOST = "172.20.10.2"
 PORT = 5544
 PACKET_SIZE = 1024
 
@@ -48,7 +48,7 @@ def playback_thread(queue, client_socket, audio, stream):
 def main():
     # Define an SSL context and verify hostname
     context = ssl.create_default_context()
-    context.load_verify_locations("./rootCA.pem")
+    context.load_verify_locations("./server.crt")
 
     # Start PyAudio for music playback
     print("You may see some audio initialization text below. This is normal.")

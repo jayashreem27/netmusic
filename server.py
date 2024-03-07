@@ -4,7 +4,7 @@ import wave
 import ssl
 import threading
 
-HOST = "127.0.0.1"
+HOST = "0.0.0.0"
 PORT = 5544
 PACKET_SIZE = 1024
 SONGS_DIR = "./resource/"
@@ -62,12 +62,13 @@ if __name__ == "__main__":
     try:
         # define the SSL socket using the keyfiles
         context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        context.load_cert_chain(certfile="./rootCA.pem",
-                                keyfile="./rootCA.key")
+        context.load_cert_chain(certfile="./server.crt",
+                                keyfile="./server.key")
 
         # create a socket
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         server_socket.bind((HOST, PORT))
+        print(f"Serving on {(HOST, PORT)}")
         server_socket.listen()
     except Exception as e:
         print(e)

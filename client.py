@@ -6,7 +6,7 @@ import queue
 import time
 
 HOSTNAME = "netmusic"
-HOST = "172.20.10.2"
+HOST = "127.0.0.1"
 PORT = 5544
 PACKET_SIZE = 1024
 

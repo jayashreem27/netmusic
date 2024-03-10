@@ -28,7 +28,20 @@ def client_thread(conn, address, ssl_context):
                 # Receive selected song indexes for the playlist
                 secure_conn.send("Enter song indexes for playlist (comma-separated): ".encode())
                 song_indexes = secure_conn.recv(PACKET_SIZE).decode().split(',')
-                songs_to_play = [files[int(index)] for index in song_indexes]
+                songs_to_play = []
+
+                # Validate indexe
+                for index in song_indexes:
+                    try:
+                        song_index = int(index)
+                        if 0 <= song_index < len(files):
+                            songs_to_play.append(files[song_index])
+                        else:
+                            secure_conn.send(f"Invalid song index: {index}. Please enter a valid index.".encode())
+                            return None
+                    except ValueError:
+                        secure_conn.send(f"Invalid song index: {index}. Please enter a valid index.".encode())
+                        return None
 
                 # Send confirmation to start playlist
                 secure_conn.send("Starting playlist...".encode())
@@ -67,30 +80,35 @@ def client_thread(conn, address, ssl_context):
                 # Receive individual song index to play
                 secure_conn.send("Enter song index to play: ".encode())
                 song_index = int(secure_conn.recv(PACKET_SIZE).decode())
-                filename = files[song_index]
 
-                # Send confirmation to start playing the selected song
-                secure_conn.send(f"Playing song {filename}...".encode())
+                # Validate song index
+                if 0 <= song_index < len(files):
+                    filename = files[song_index]
 
-                # Play the selected song
-                song_path = SONGS_DIR + filename
-                waveform = wave.open(song_path, 'rb')
-                print(f"{address} opened file", song_path)
+                    # Send confirmation to start playing the selected song
+                    secure_conn.send(f"Playing song {filename}...".encode())
 
-                data = " "
-                while data:
-                    data = waveform.readframes(PACKET_SIZE)
-                    secure_conn.send(data)
-                    res = secure_conn.recv(PACKET_SIZE).decode()
-                    if res == "paus":
-                        while True:
-                            res = secure_conn.recv(PACKET_SIZE).decode()
-                            if res == "play":
-                                continue
-                            else:
-                                break
-                waveform.close()
-                secure_conn.send("Song finished".encode())
+                    # Play the selected song
+                    song_path = SONGS_DIR + filename
+                    waveform = wave.open(song_path, 'rb')
+                    print(f"{address} opened file", song_path)
+
+                    data = " "
+                    while data:
+                        data = waveform.readframes(PACKET_SIZE)
+                        secure_conn.send(data)
+                        res = secure_conn.recv(PACKET_SIZE).decode()
+                        if res == "paus":
+                            while True:
+                                res = secure_conn.recv(PACKET_SIZE).decode()
+                                if res == "play":
+                                    continue
+                                else:
+                                    break
+                    waveform.close()
+                    secure_conn.send("Song finished".encode())
+                else:
+                    secure_conn.send("Invalid song index. Please enter a valid index.".encode())
         except ssl.SSLEOFError:
             print(f"[{address}] disconnected")
         except KeyboardInterrupt:

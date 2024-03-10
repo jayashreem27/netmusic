@@ -79,6 +79,11 @@ def client_thread(conn, address, ssl_context):
                     # Notify client that the song has finished
                     if index < len(songs_to_play) - 1:
                         secure_conn.send("Song finished".encode())
+                        # Wait for acknowledgment
+                        res = secure_conn.recv(PACKET_SIZE).decode()
+                        if res != "ack":
+                            print("Error: Expected acknowledgment from client.")
+                            return None
                     else:
                         secure_conn.send("Playlist finished".encode())
             else:
@@ -110,6 +115,15 @@ def client_thread(conn, address, ssl_context):
                                 else:
                                     break
                     waveform.close()
+                    secure_conn.send("Song finished".encode())
+                    # Wait for acknowledgment
+                    res = secure_conn.recv(PACKET_SIZE).decode()
+                    if res != "ack":
+                        print("Error: Expected acknowledgment from client.")
+                        return None
+                    else:
+                        secure_conn.send(
+                            "Invalid song index. Please enter a valid index.".encode())
                 else:
                     secure_conn.send(
                         "Invalid song index. Please enter a valid index.".encode())

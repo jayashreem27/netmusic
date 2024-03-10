@@ -152,6 +152,10 @@ def main():
                             comm_queue.put("stop")
                             audio_worker.join()
                             break
+                comm_queue.put("stop")
+                audio_worker.join()
+                print(client_socket.recv(PACKET_SIZE).decode())
+                client_socket.send("ack".encode())
                 stream.start_stream()
             else:
                 correct = False
@@ -213,7 +217,9 @@ def main():
                     stream.start_stream()
                     i += 1
                     val = client_socket.recv(PACKET_SIZE).decode()
-                    if "finished" in val:
+                    if "Song" in val:
+                        client_socket.send("ack".encode())
+                    else:
                         run = False
 
         except Exception as e:

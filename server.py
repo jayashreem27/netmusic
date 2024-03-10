@@ -26,22 +26,28 @@ def client_thread(conn, address, ssl_context):
 
             if playlist_choice.lower() == 'yes':
                 # Receive selected song indexes for the playlist
-                secure_conn.send("Enter song indexes for playlist (comma-separated): ".encode())
-                song_indexes = secure_conn.recv(PACKET_SIZE).decode().split(',')
+                secure_conn.send(
+                    "Enter song indexes for playlist (comma-separated): ".encode())
+                song_indexes = secure_conn.recv(
+                    PACKET_SIZE).decode().split(',')
                 songs_to_play = []
 
-                # Validate indexe
+                # Validate index
                 for index in song_indexes:
                     try:
                         song_index = int(index)
                         if 0 <= song_index < len(files):
                             songs_to_play.append(files[song_index])
                         else:
-                            secure_conn.send(f"Invalid song index: {index}. Please enter a valid index.".encode())
+                            secure_conn.send(f"Invalid song index: {
+                                             index}. Please enter a valid index.".encode())
                             return None
                     except ValueError:
-                        secure_conn.send(f"Invalid song index: {index}. Please enter a valid index.".encode())
+                        secure_conn.send(f"Invalid song index: {
+                                         index}. Please enter a valid index.".encode())
                         return None
+                else:
+                    secure_conn.send("Valid".encode())
 
                 # Send confirmation to start playlist
                 secure_conn.send("Starting playlist...".encode())
@@ -72,8 +78,7 @@ def client_thread(conn, address, ssl_context):
 
                     # Notify client that the song has finished
                     if index < len(songs_to_play) - 1:
-                        next_song = songs_to_play[index + 1]
-                        secure_conn.send(f"Song {filename} finished. Next song: {next_song}".encode())
+                        secure_conn.send("Song finished".encode())
                     else:
                         secure_conn.send("Playlist finished".encode())
             else:
@@ -85,8 +90,7 @@ def client_thread(conn, address, ssl_context):
                 if 0 <= song_index < len(files):
                     filename = files[song_index]
 
-                    # Send confirmation to start playing the selected song
-                    secure_conn.send(f"Playing song {filename}...".encode())
+                    secure_conn.send("Valid".encode())
 
                     # Play the selected song
                     song_path = SONGS_DIR + filename
@@ -106,9 +110,9 @@ def client_thread(conn, address, ssl_context):
                                 else:
                                     break
                     waveform.close()
-                    secure_conn.send("Song finished".encode())
                 else:
-                    secure_conn.send("Invalid song index. Please enter a valid index.".encode())
+                    secure_conn.send(
+                        "Invalid song index. Please enter a valid index.".encode())
         except ssl.SSLEOFError:
             print(f"[{address}] disconnected")
         except KeyboardInterrupt:
